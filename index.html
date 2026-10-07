@@ -73,7 +73,7 @@ function seg(){const[a,b,A,B]=range();const o=d=>d.toLocaleDateString("en",{mont
 function inRange(){const[a,b]=range();return S.exp.filter(e=>e.date>=a&&e.date<=b)}
 function home(){const p=monthPlan(),l=inRange(),tot={};l.forEach(e=>tot[e.cat]=(tot[e.cat]||0)+toRub(e.amt,e.cur));
  const sum=Object.values(tot).reduce((a,b)=>a+b,0);
- return`<h1>My Money 💸</h1>
+ return`<h1>My Money 💸</h1>${S.set.drive&&(!S.set.bk||Date.now()-S.set.bk>6048e5)?`<div class="card bad">⚠️ Time to back up — Setup → Back up now</div>`:""}
  <div class="card"><div class="mu">Expected savings this month</div>
  <div class="big ${p.left<0?"bad":"ok"}">${f(p.left,"RUB")}</div>
  <div class="mu">${S.set.salary?"":"Set your salary in Setup. "}Income ${f(p.inc,"RUB")} − bills ${f(p.bills,"RUB")} − spending ${f(p.ex,"RUB")} (incl. ${S.set.fee}% transfer cost on PHP/USD)</div></div>
@@ -118,6 +118,11 @@ function xfer(){const p=monthPlan(),s=S.set,need=p.php+p.usd*s.phpPerUsd,rubSend
 function set(){const s=S.set;const inp=(k,l,st)=>`<label class="mu">${l}</label><input type="number" step="${st||"any"}" value="${s[k]}" onchange="S.set.${k}=+this.value;save()" style="margin-bottom:8px">`;
  return`<h1>Setup</h1><div class="card">${inp("salary","Salary per payday (₽) — paid on the 11th & 26th")}${inp("phpPerRub","Rate: ₱ per 1 ₽")}${inp("phpPerUsd","Rate: ₱ per $1")}${inp("fee","Transfer cost on foreign money (%)")}<label class="mu">BDO account that receives your money</label><select onchange="S.set.bdo=this.value;save()"><option ${s.bdo=="Savings"?"selected":""}>Savings</option><option ${s.bdo=="Current"?"selected":""}>Current</option></select><label class="mu">Google Drive upload address (from Apps Script)</label><input value="${s.drive||""}" placeholder="https://script.google.com/macros/s/…/exec" onchange="S.set.drive=this.value.trim();save()"></div>
  <div class="card"><h2>Bills</h2>${S.bills.map(b=>`<div class="row"><span>${b.name} <span class="mu">(${b.cur}, day ${b.day})</span>${mo(b)}</span><span><input type="number" style="width:90px" value="${b.est}" onchange="S.bills.find(x=>x.id==${b.id}).est=+this.value;save()"> <span class="mu" onclick="S.bills=S.bills.filter(x=>x.id!=${b.id});save();render()">✕</span></span></div>`).join("")}<div class="mu">Numbers above are your usual amounts, used until you enter the real bill.</div></div>
- <div class="mu">Data is saved on this device only.</div>`}
+ <div class="card"><h2>Backup</h2><div class="mu" id="bk">${s.bk?"Last backup: "+new Date(s.bk).toLocaleString():"Not backed up yet"}</div><div class="g" style="margin-top:8px"><button onclick="doBackup()">Back up now</button><button class="s" onclick="doRestore()">Restore</button></div><div class="mu">New phone? Open the app, paste your Drive address above, then tap Restore.</div></div>`}
+async function cloud(a,data){const r=await fetch(S.set.drive,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:a,data})});return r.json()}
+async function doBackup(){if(!S.set.drive)return alert("Paste the Drive upload address first.");$("#bk").textContent="Backing up…";
+try{S.set.bk=Date.now();const j=await cloud("backup",JSON.stringify({set:S.set,exp:S.exp,bills:S.bills,pay:S.pay}));if(!j.ok)throw 0;save();alert("Backed up to Drive ✅")}catch(e){alert("Backup failed. Check the Drive address and that you deployed the new script version.")}render()}
+async function doRestore(){if(!S.set.drive)return alert("Paste the Drive upload address first.");if(!confirm("Replace everything on this device with your Drive backup?"))return;
+try{const j=await cloud("restore");if(!j.ok||!j.data)return alert("No backup found in Drive yet.");const o=JSON.parse(j.data),dr=S.set.drive;S.set=o.set;S.set.drive=dr;S.exp=o.exp;S.bills=o.bills;S.pay=o.pay;save();alert("Restored ✅");tab="home";render()}catch(e){alert("Restore failed. Check the Drive address and the script version.")}}
 render();
 </script></body></html>
