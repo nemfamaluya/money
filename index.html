@@ -110,7 +110,7 @@ function bills(){const t=new Date().getDate(),m=mk();const pm=new Date();pm.setM
  <div class="card"><h2>Add a bill</h2><div class="g"><input id="bn" placeholder="Name"><select id="bc">${["RUB","PHP","USD"].map(c=>`<option>${c}</option>`)}</select><input id="bd" type="number" placeholder="Due day (1-31)"><input id="be" type="number" placeholder="Usual amount"><select id="bf"><option value="1">Monthly</option><option value="3">Every 3 months</option></select></div><button onclick="addBill()">Add</button></div>`}
 function setBill(id,k,v){const key=id+"|"+mk();S.pay[key]=S.pay[key]||{};S.pay[key][k]=v;save();render()}
 function addBill(){const n=$("#bn").value;if(!n)return;S.bills.push({id:Date.now(),name:n,cur:$("#bc").value,est:+$("#be").value||0,day:+$("#bd").value||1,var:1,fr:+$("#bf").value,st:new Date().getMonth()+1});save();render()}
-function xfer(){const p=monthPlan(),m=mk();
+function xfer(){const p=monthPlan(),m=mk(),mv=S.tr.filter(t=>t.date.startsWith(m)&&t.kind=="RUB").reduce((a,t)=>a+t.rub,0);
  const L=S.tr.filter(t=>t.date.startsWith(m)).sort((a,b)=>b.date.localeCompare(a.date));
  const st=(pool,c)=>`<b class="${pool<0?"bad":"ok"}">${pool<0?"short ":"extra "}${f(Math.abs(pool),c)}</b>`;
  return`<h1>Money moves</h1>
@@ -120,20 +120,21 @@ function xfer(){const p=monthPlan(),m=mk();
  <div class="row"><span>In US bank (cards + $ spending)</span><b>${f(p.nU,"USD")}</b></div>
  ${Object.keys(p.ub).map(n=>`<div class="row mu"><span>&nbsp;&nbsp;→ ${n.replace(" card","")} savings</span><span>${f(p.ub[n],"USD")}</span></div>`).join("")}</div>
  <div class="card"><h2>Log a transfer</h2>
- <div class="mu" style="margin-bottom:8px">You send rubles (Russian bank → Russian bank). Your friend then sends BDO → BDO, or USD to your US bank. Enter what you really sent and got.</div>
- <div class="g"><select id="tk"><option value="PHP">Pesos to my BDO</option><option value="USD">Dollars to my US bank</option></select><input id="td" type="date" value="${iso(new Date())}">
+ <div class="mu" style="margin-bottom:8px">You send rubles (Russian bank → Russian bank). Your friend then sends BDO → BDO, or USD to your US bank. Enter what you really sent and got. For rubles to your own bank, leave the last box empty.</div>
+ <div class="g"><select id="tk"><option value="PHP">Rubles → pesos in my BDO</option><option value="USD">Rubles → dollars in my US bank</option><option value="RUB">Rubles → my own Russian bank</option></select><input id="td" type="date" value="${iso(new Date())}">
  <input id="tr" type="number" inputmode="decimal" placeholder="Rubles I sent ₽"><input id="tg" type="number" inputmode="decimal" placeholder="Amount received (₱ or $)"></div>
  <button onclick="addTr()">Save transfer</button></div>
- <div class="card"><h2>Transfers this month</h2>${L.map(t=>`<div class="row"><div><div>${t.kind=="PHP"?"₱ to BDO":"$ to US bank"} · ${t.date}</div><div class="mu">sent ${f(t.rub,"RUB")} → got ${f(t.got,t.kind)} (${(t.got/t.rub).toFixed(3)} per ₽)</div></div><span class="mu" onclick="delTr('${t.id}')">delete</span></div>`).join("")||'<div class="mu">None logged yet — until you log one, the app assumes you send exactly what you need.</div>'}</div>
+ <div class="card"><h2>Transfers this month</h2>${L.map(t=>`<div class="row"><div><div>${({PHP:"₱ to BDO",USD:"$ to US bank",RUB:"₽ to my own Russian bank"})[t.kind]} · ${t.date}</div><div class="mu">${t.kind=="RUB"?"moved "+f(t.rub,"RUB"):"sent "+f(t.rub,"RUB")+" → got "+f(t.got,t.kind)+" ("+(t.got/t.rub).toFixed(3)+" per ₽)"}</div></div><span class="mu" onclick="delTr('${t.id}')">delete</span></div>`).join("")||'<div class="mu">None logged yet — until you log one, the app assumes you send exactly what you need.</div>'}</div>
  <div class="card"><h2>After everything</h2>
  <div class="row"><span>Salary (2 paydays)</span><b>${f(p.inc,"RUB")}</b></div>
  <div class="row"><span>Rubles sent out</span><b>${f(p.outP+p.outU,"RUB")}</b></div>
+ <div class="row"><span>Moved to my own Russian bank (still yours)</span><b>${f(mv,"RUB")}</b></div>
  <div class="row"><span>Russia bills &amp; spending</span><b>${f(p.rub+p.exc.RUB,"RUB")}</b></div>
  <div class="row"><span>BDO: received vs needed</span>${p.tp.length?st(p.poolP,"PHP"):'<span class="mu">no transfer yet</span>'}</div>
  <div class="row"><span>US bank: received vs needed</span>${p.tu.length?st(p.poolU,"USD"):'<span class="mu">no transfer yet</span>'}</div>
  <div class="mu" style="margin-top:8px">Estimated savings</div><div class="big ${p.left<0?"bad":"ok"}">${f(p.left,"RUB")}</div>
  <div class="mu">Extra pesos/dollars count as savings at your Setup rates. "Short" means you need to send more.</div></div>`}
-function addTr(){const r=+$("#tr").value,g=+$("#tg").value;if(!r||!g)return alert("Enter the rubles sent and the amount received");S.tr.push({id:Date.now()+"",date:$("#td").value,kind:$("#tk").value,rub:r,got:g});save();render()}
+function addTr(){const k=$("#tk").value,r=+$("#tr").value,g=k=="RUB"?r:+$("#tg").value;if(!r||!g)return alert("Enter the rubles sent and the amount received");S.tr.push({id:Date.now()+"",date:$("#td").value,kind:k,rub:r,got:g});save();render()}
 function delTr(id){if(confirm("Delete this transfer?")){S.tr=S.tr.filter(t=>t.id!=id);save();render()}}
 function set(){const s=S.set;const inp=(k,l,st)=>`<label class="mu">${l}</label><input type="number" step="${st||"any"}" value="${s[k]}" onchange="S.set.${k}=+this.value;save()" style="margin-bottom:8px">`;
  return`<h1>Setup</h1><div class="card">${inp("salary","Salary per payday (₽) — paid on the 11th & 26th")}${inp("phpPerRub","Rate: ₱ per 1 ₽")}${inp("phpPerUsd","Rate: ₱ per $1")}${inp("fee","Transfer cost on foreign money (%)")}<label class="mu">BDO account that receives your money</label><select onchange="S.set.bdo=this.value;save()"><option ${s.bdo=="Savings"?"selected":""}>Savings</option><option ${s.bdo=="Current"?"selected":""}>Current</option></select><label class="mu">Google Drive upload address (from Apps Script)</label><input value="${s.drive||""}" placeholder="https://script.google.com/macros/s/…/exec" onchange="S.set.drive=this.value.trim();save()"></div>
