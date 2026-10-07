@@ -24,6 +24,7 @@ nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);b
 nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:12px 2px;font-size:12px}nav button.on{color:var(--ac)}
 img.th{width:40px;height:40px;object-fit:cover;border-radius:8px}
 .bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ac)}
+.fb{display:block;text-align:center;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:9px;cursor:pointer}
 .pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd)}
 </style></head><body><main id="app"></main>
 <nav id="nav"></nav>
@@ -92,8 +93,8 @@ function exp(){const l=inRange().sort((a,b)=>b.date.localeCompare(a.date));
  <div class="g"><input id="ea" type="number" inputmode="decimal" placeholder="Amount"><select id="ec">${["RUB","PHP","USD"].map(c=>`<option>${c}</option>`)}</select>
  <select id="et">${CATS.map(c=>`<option>${c}</option>`)}</select><input id="ed" type="date" value="${iso(new Date())}"></div>
  <input id="en" placeholder="Note (store, item)" style="margin-bottom:8px">
- <div class="g"><input id="ep" type="file" accept="image/*" capture="environment" onchange="photo(this)"><button onclick="addExp()">Save</button></div>
- <div class="mu" id="pm">📷 Take a photo of the receipt (optional)</div></div>
+ <div class="g"><label class="fb">📷 Take photo<input type="file" accept="image/*" capture="environment" onchange="photo(this)" hidden></label><label class="fb">🖼️ From gallery<input type="file" accept="image/*" onchange="photo(this)" hidden></label></div><button onclick="addExp()" style="width:100%">Save</button>
+ <div class="mu" id="pm">📷 Take a photo or pick one from your gallery (optional)</div></div>
  <div class="card"><h2>List</h2>${seg()}${l.map(e=>`<div class="row"><div style="display:flex;gap:8px;align-items:center">${e.img?`<img class="th" src="${e.img}" onclick="big('${e.id}')">`:""}${e.link?`<a href="${e.link}" target="_blank" style="font-size:26px;text-decoration:none">📎</a>`:""}<div><div>${e.note||e.cat}</div><div class="mu">${e.date} · ${e.cat}</div></div></div><div style="text-align:right"><b>${f(e.amt,e.cur)}</b><br><span class="mu" onclick="delExp('${e.id}')">delete</span></div></div>`).join("")||'<div class="mu">Nothing here.</div>'}</div>`}
 function photo(i){const fl=i.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,700/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*k;c.height=im.height*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);pend=c.toDataURL("image/jpeg",.6);$("#pm").textContent="✅ Photo attached"};im.src=r.result};r.readAsDataURL(fl)}
 async function addExp(){const a=+$("#ea").value;if(!a)return alert("Enter an amount");
