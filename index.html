@@ -39,7 +39,7 @@ let S={set:{salary:0,phpPerRub:0.7,phpPerUsd:57,fee:2},exp:[],bills:[
 {id:11,name:"SSS (mom)",cur:"PHP",est:0,day:25,var:0,fr:3,st:1},{id:12,name:"Pag-IBIG",cur:"PHP",est:0,day:25,var:0,fr:3,st:1},
 {id:13,name:"PhilHealth",cur:"PHP",est:0,day:25,var:0,fr:3,st:1}],pay:{}};
 try{let r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);else{r=localStorage.getItem("mtracker1");if(r){const o=JSON.parse(r);S.set=o.set;S.exp=o.exp}}}catch(e){}
-S.set.bdo=S.set.bdo||"Savings";
+S.set.bdo=S.set.bdo||"Savings";S.tr=S.tr||[];
 const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const due=b=>{if((b.fr||1)==1)return true;return(((new Date().getMonth()-(b.st-1))%3)+3)%3==0};
 const mo=b=>b.fr==3?`<br><span class="mu">every 3 months, starting </span><select style="width:75px;padding:4px" onchange="S.bills.find(x=>x.id==${b.id}).st=+this.value;save()">${MN.map((m,i)=>`<option value="${i+1}" ${b.st==i+1?"selected":""}>${m}</option>`).join("")}</select>`:"";
@@ -59,10 +59,17 @@ function range(){const n=new Date();let a,b;
  return[iso(a),iso(b),a,b]}
 const mk=()=>{const n=new Date();return n.getFullYear()+"-"+pad(n.getMonth()+1)};
 const billAmt=b=>{const p=S.pay[b.id+"|"+mk()];return p&&p.amt!=null&&p.amt!==""?+p.amt:b.est};
-function monthPlan(){const s=S.set;const inc=s.salary*2;let bills=0,php=0,usd=0,rub=0,ub={},pl=[];
+function monthPlan(){const s=S.set,m=mk(),inc=s.salary*2;
+ let bills=0,php=0,usd=0,rub=0,ub={},pl=[];
  S.bills.filter(due).forEach(b=>{const a=billAmt(b);bills+=toRub(a,b.cur);if(b.cur=="PHP"){php+=a;pl.push([b.name,a])}else if(b.cur=="USD"){usd+=a;ub[b.name]=(ub[b.name]||0)+a}else rub+=a});
- const m=mk();const ex=S.exp.filter(e=>e.date.startsWith(m)).reduce((t,e)=>t+toRub(e.amt,e.cur),0);
- return{inc,bills,ex,left:inc-bills-ex,php,usd,rub,ub,pl}}
+ const exc={RUB:0,PHP:0,USD:0};let ex=0;
+ S.exp.filter(e=>e.date.startsWith(m)).forEach(e=>{exc[e.cur]+=e.amt;ex+=toRub(e.amt,e.cur)});
+ const T=k=>S.tr.filter(t=>t.date.startsWith(m)&&t.kind==k),sm=(a,k)=>a.reduce((t,x)=>t+x[k],0);
+ const tp=T("PHP"),tu=T("USD"),k=1+s.fee/100,nP=php+exc.PHP,nU=usd+exc.USD;
+ const outP=tp.length?sm(tp,"rub"):nP/s.phpPerRub*k,poolP=tp.length?sm(tp,"got")-nP:0;
+ const outU=tu.length?sm(tu,"rub"):nU*s.phpPerUsd/s.phpPerRub*k,poolU=tu.length?sm(tu,"got")-nU:0;
+ const left=inc-rub-exc.RUB-outP-outU+poolP/s.phpPerRub+poolU*s.phpPerUsd/s.phpPerRub;
+ return{inc,bills,ex,left,php,usd,rub,ub,pl,nP,nU,tp,tu,outP,outU,poolP,poolU,exc}}
 function render(){
  const nav=[["home","Home"],["exp","Receipts"],["bills","Bills"],["xfer","Transfers"],["set","Setup"]];
  $("#nav").innerHTML=nav.map(x=>`<button class="${tab==x[0]?"on":""}" onclick="tab='${x[0]}';render()">${x[1]}</button>`).join("");
@@ -76,7 +83,7 @@ function home(){const p=monthPlan(),l=inRange(),tot={};l.forEach(e=>tot[e.cat]=(
  return`<h1>My Money 💸</h1>${S.set.drive&&(!S.set.bk||Date.now()-S.set.bk>6048e5)?`<div class="card bad">⚠️ Time to back up — Setup → Back up now</div>`:""}
  <div class="card"><div class="mu">Expected savings this month</div>
  <div class="big ${p.left<0?"bad":"ok"}">${f(p.left,"RUB")}</div>
- <div class="mu">${S.set.salary?"":"Set your salary in Setup. "}Income ${f(p.inc,"RUB")} − bills ${f(p.bills,"RUB")} − spending ${f(p.ex,"RUB")} (incl. ${S.set.fee}% transfer cost on PHP/USD)</div></div>
+ <div class="mu">${S.set.salary?"":"Set your salary in Setup. "}Income ${f(p.inc,"RUB")}, after bills, spending and your transfers (see Transfers tab)</div></div>
  <div class="card"><h2>Spending</h2>${seg()}<div class="big">${f(sum,"RUB")}</div>
  ${Object.keys(tot).sort((a,b)=>tot[b]-tot[a]).map(c=>`<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><span>${c}</span><span>${f(tot[c],"RUB")}</span></div><div class="bar"><i style="width:${tot[c]/sum*100}%"></i></div></div>`).join("")||'<div class="mu">No receipts in this range yet.</div>'}</div>`}
 function exp(){const l=inRange().sort((a,b)=>b.date.localeCompare(a.date));
@@ -103,26 +110,39 @@ function bills(){const t=new Date().getDate(),m=mk();const pm=new Date();pm.setM
  <div class="card"><h2>Add a bill</h2><div class="g"><input id="bn" placeholder="Name"><select id="bc">${["RUB","PHP","USD"].map(c=>`<option>${c}</option>`)}</select><input id="bd" type="number" placeholder="Due day (1-31)"><input id="be" type="number" placeholder="Usual amount"><select id="bf"><option value="1">Monthly</option><option value="3">Every 3 months</option></select></div><button onclick="addBill()">Add</button></div>`}
 function setBill(id,k,v){const key=id+"|"+mk();S.pay[key]=S.pay[key]||{};S.pay[key][k]=v;save();render()}
 function addBill(){const n=$("#bn").value;if(!n)return;S.bills.push({id:Date.now(),name:n,cur:$("#bc").value,est:+$("#be").value||0,day:+$("#bd").value||1,var:1,fr:+$("#bf").value,st:new Date().getMonth()+1});save();render()}
-function xfer(){const p=monthPlan(),s=S.set,need=p.php+p.usd*s.phpPerUsd,rubSend=need/s.phpPerRub*(1+s.fee/100);
- return`<h1>Money moves</h1><div class="card"><h2>This month's flow</h2>
- <div class="row"><span>1. Salary (2 paydays)</span><b>${f(p.inc,"RUB")}</b></div>
- <div class="row"><span>2. Keep in Russia (rent, utilities, spending)</span><b>${f(p.rub+p.ex,"RUB")}</b></div>
- <div class="row"><span>3. Russian bank → BDO ${s.bdo.toLowerCase()}</span><b>${f(rubSend,"RUB")}</b></div>
- <div class="row"><span>&nbsp;&nbsp;= received in PH (approx.)</span><b>${f(rubSend/(1+s.fee/100)*s.phpPerRub,"PHP")}</b></div>
- <div class="row"><span>4. Pay from BDO (${p.pl.length} bills)</span><b>${f(p.php,"PHP")}</b></div>${p.pl.map(x=>`<div class="row mu"><span>&nbsp;&nbsp;${x[0]}</span><span>${f(x[1],"PHP")}</span></div>`).join("")}
- <div class="row"><span>5. BDO → friend abroad (for US cards)</span><b>${f(p.usd*s.phpPerUsd,"PHP")}</b></div>
- <div class="row"><span>6. Friend deposits USD in your US savings</span><b>${f(p.usd,"USD")}</b></div>${Object.keys(p.ub).map(n=>`<div class="row mu"><span>&nbsp;&nbsp;→ ${n.replace(" card","")} savings</span><span>${f(p.ub[n],"USD")}</span></div>`).join("")}</div>
- <div class="card"><div class="mu">Left over after everything</div><div class="big ${p.left<0?"bad":"ok"}">${f(p.left,"RUB")}</div>
- <div class="mu">${p.left<0?"You're short — trim spending or check bill amounts.":"That's your savings estimate. Move it to savings right on payday."}</div></div>
- <div class="mu">Amounts use the rates in Setup — update them to match your bank's rate.</div>`}
+function xfer(){const p=monthPlan(),m=mk();
+ const L=S.tr.filter(t=>t.date.startsWith(m)).sort((a,b)=>b.date.localeCompare(a.date));
+ const st=(pool,c)=>`<b class="${pool<0?"bad":"ok"}">${pool<0?"short ":"extra "}${f(Math.abs(pool),c)}</b>`;
+ return`<h1>Money moves</h1>
+ <div class="card"><h2>What you need this month</h2>
+ <div class="row"><span>In BDO (PH bills + ₱ spending)</span><b>${f(p.nP,"PHP")}</b></div>
+ ${p.pl.map(x=>`<div class="row mu"><span>&nbsp;&nbsp;${x[0]}</span><span>${f(x[1],"PHP")}</span></div>`).join("")}
+ <div class="row"><span>In US bank (cards + $ spending)</span><b>${f(p.nU,"USD")}</b></div>
+ ${Object.keys(p.ub).map(n=>`<div class="row mu"><span>&nbsp;&nbsp;→ ${n.replace(" card","")} savings</span><span>${f(p.ub[n],"USD")}</span></div>`).join("")}</div>
+ <div class="card"><h2>Log a transfer</h2>
+ <div class="mu" style="margin-bottom:8px">You send rubles (Russian bank → Russian bank). Your friend then sends BDO → BDO, or USD to your US bank. Enter what you really sent and got.</div>
+ <div class="g"><select id="tk"><option value="PHP">Pesos to my BDO</option><option value="USD">Dollars to my US bank</option></select><input id="td" type="date" value="${iso(new Date())}">
+ <input id="tr" type="number" inputmode="decimal" placeholder="Rubles I sent ₽"><input id="tg" type="number" inputmode="decimal" placeholder="Amount received (₱ or $)"></div>
+ <button onclick="addTr()">Save transfer</button></div>
+ <div class="card"><h2>Transfers this month</h2>${L.map(t=>`<div class="row"><div><div>${t.kind=="PHP"?"₱ to BDO":"$ to US bank"} · ${t.date}</div><div class="mu">sent ${f(t.rub,"RUB")} → got ${f(t.got,t.kind)} (${(t.got/t.rub).toFixed(3)} per ₽)</div></div><span class="mu" onclick="delTr('${t.id}')">delete</span></div>`).join("")||'<div class="mu">None logged yet — until you log one, the app assumes you send exactly what you need.</div>'}</div>
+ <div class="card"><h2>After everything</h2>
+ <div class="row"><span>Salary (2 paydays)</span><b>${f(p.inc,"RUB")}</b></div>
+ <div class="row"><span>Rubles sent out</span><b>${f(p.outP+p.outU,"RUB")}</b></div>
+ <div class="row"><span>Russia bills &amp; spending</span><b>${f(p.rub+p.exc.RUB,"RUB")}</b></div>
+ <div class="row"><span>BDO: received vs needed</span>${p.tp.length?st(p.poolP,"PHP"):'<span class="mu">no transfer yet</span>'}</div>
+ <div class="row"><span>US bank: received vs needed</span>${p.tu.length?st(p.poolU,"USD"):'<span class="mu">no transfer yet</span>'}</div>
+ <div class="mu" style="margin-top:8px">Estimated savings</div><div class="big ${p.left<0?"bad":"ok"}">${f(p.left,"RUB")}</div>
+ <div class="mu">Extra pesos/dollars count as savings at your Setup rates. "Short" means you need to send more.</div></div>`}
+function addTr(){const r=+$("#tr").value,g=+$("#tg").value;if(!r||!g)return alert("Enter the rubles sent and the amount received");S.tr.push({id:Date.now()+"",date:$("#td").value,kind:$("#tk").value,rub:r,got:g});save();render()}
+function delTr(id){if(confirm("Delete this transfer?")){S.tr=S.tr.filter(t=>t.id!=id);save();render()}}
 function set(){const s=S.set;const inp=(k,l,st)=>`<label class="mu">${l}</label><input type="number" step="${st||"any"}" value="${s[k]}" onchange="S.set.${k}=+this.value;save()" style="margin-bottom:8px">`;
  return`<h1>Setup</h1><div class="card">${inp("salary","Salary per payday (₽) — paid on the 11th & 26th")}${inp("phpPerRub","Rate: ₱ per 1 ₽")}${inp("phpPerUsd","Rate: ₱ per $1")}${inp("fee","Transfer cost on foreign money (%)")}<label class="mu">BDO account that receives your money</label><select onchange="S.set.bdo=this.value;save()"><option ${s.bdo=="Savings"?"selected":""}>Savings</option><option ${s.bdo=="Current"?"selected":""}>Current</option></select><label class="mu">Google Drive upload address (from Apps Script)</label><input value="${s.drive||""}" placeholder="https://script.google.com/macros/s/…/exec" onchange="S.set.drive=this.value.trim();save()"></div>
  <div class="card"><h2>Bills</h2>${S.bills.map(b=>`<div class="row"><span>${b.name} <span class="mu">(${b.cur}) due day </span><input type="number" min="1" max="31" style="width:60px;padding:4px" value="${b.day}" onchange="S.bills.find(x=>x.id==${b.id}).day=+this.value;save()">${mo(b)}</span><span><input type="number" style="width:90px" value="${b.est}" onchange="S.bills.find(x=>x.id==${b.id}).est=+this.value;save()"> <span class="mu" onclick="S.bills=S.bills.filter(x=>x.id!=${b.id});save();render()">✕</span></span></div>`).join("")}<div class="mu">Numbers above are your usual amounts, used until you enter the real bill.</div></div>
  <div class="card"><h2>Backup</h2><div class="mu" id="bk">${s.bk?"Last backup: "+new Date(s.bk).toLocaleString():"Not backed up yet"}</div><div class="g" style="margin-top:8px"><button onclick="doBackup()">Back up now</button><button class="s" onclick="doRestore()">Restore</button></div><div class="mu">New phone? Open the app, paste your Drive address above, then tap Restore.</div></div>`}
 async function cloud(a,data){const r=await fetch(S.set.drive,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:a,data})});return r.json()}
 async function doBackup(){if(!S.set.drive)return alert("Paste the Drive upload address first.");$("#bk").textContent="Backing up…";
-try{S.set.bk=Date.now();const j=await cloud("backup",JSON.stringify({set:S.set,exp:S.exp,bills:S.bills,pay:S.pay}));if(!j.ok)throw 0;save();alert("Backed up to Drive ✅")}catch(e){alert("Backup failed. Check the Drive address and that you deployed the new script version.")}render()}
+try{S.set.bk=Date.now();const j=await cloud("backup",JSON.stringify({set:S.set,exp:S.exp,bills:S.bills,pay:S.pay,tr:S.tr}));if(!j.ok)throw 0;save();alert("Backed up to Drive ✅")}catch(e){alert("Backup failed. Check the Drive address and that you deployed the new script version.")}render()}
 async function doRestore(){if(!S.set.drive)return alert("Paste the Drive upload address first.");if(!confirm("Replace everything on this device with your Drive backup?"))return;
-try{const j=await cloud("restore");if(!j.ok||!j.data)return alert("No backup found in Drive yet.");const o=JSON.parse(j.data),dr=S.set.drive;S.set=o.set;S.set.drive=dr;S.exp=o.exp;S.bills=o.bills;S.pay=o.pay;save();alert("Restored ✅");tab="home";render()}catch(e){alert("Restore failed. Check the Drive address and the script version.")}}
+try{const j=await cloud("restore");if(!j.ok||!j.data)return alert("No backup found in Drive yet.");const o=JSON.parse(j.data),dr=S.set.drive;S.set=o.set;S.set.drive=dr;S.exp=o.exp;S.bills=o.bills;S.pay=o.pay;S.tr=o.tr||[];save();alert("Restored ✅");tab="home";render()}catch(e){alert("Restore failed. Check the Drive address and the script version.")}}
 render();
 </script></body></html>
