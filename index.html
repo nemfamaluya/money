@@ -40,12 +40,12 @@ let S={set:{salary:0,phpPerRub:0.7,phpPerUsd:57,fee:2},exp:[],bills:[
 {id:11,name:"SSS (mom)",cur:"PHP",est:0,day:25,var:0,fr:3,st:1},{id:12,name:"Pag-IBIG",cur:"PHP",est:0,day:25,var:0,fr:3,st:1},
 {id:13,name:"PhilHealth",cur:"PHP",est:0,day:25,var:0,fr:3,st:1}],pay:{}};
 try{let r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);else{r=localStorage.getItem("mtracker1");if(r){const o=JSON.parse(r);S.set=o.set;S.exp=o.exp}}}catch(e){}
-S.set.bdo=S.set.bdo||"Savings";S.tr=(S.tr||[]).filter(t=>t.kind!="USD");
+S.set.bdo=S.set.bdo||"Savings";S.tr=(S.tr||[]).filter(t=>t.kind!="USD");S.sal=S.sal||{};S.act=S.act||{};S.cats=S.cats||[...CATS];S.bills.forEach(b=>{if(b.name!="Apartment rent")b.var=1});
 const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const due=b=>{if((b.fr||1)==1)return true;return(((new Date().getMonth()-(b.st-1))%3)+3)%3==0};
+const due=(b,mi)=>{if((b.fr||1)==1)return true;if(mi==null)mi=new Date().getMonth();return(((mi-(b.st-1))%3)+3)%3==0};
 const mo=b=>b.fr==3?`<br><span class="mu">every 3 months, starting </span><select style="width:75px;padding:4px" onchange="S.bills.find(x=>x.id==${b.id}).st=+this.value;save()">${MN.map((m,i)=>`<option value="${i+1}" ${b.st==i+1?"selected":""}>${m}</option>`).join("")}</select>`:"";
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert("Storage full — delete some old receipt photos.")}}
-let tab="home",mode="half",off=0,pend=null;
+let tab="home",mode="half",off=0,pend=null,ed=null,bo=0;
 const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,"0");
 const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const sym={RUB:"₽",PHP:"₱",USD:"$"};
@@ -59,10 +59,13 @@ function range(){const n=new Date();let a,b;
  else{let d=n;for(let i=0;i<Math.abs(off);i++){const h=halfOf(d);d=off<0?new Date(h[0].getFullYear(),h[0].getMonth(),h[0].getDate()-1):new Date(h[1].getFullYear(),h[1].getMonth(),h[1].getDate()+1)}[a,b]=halfOf(d)}
  return[iso(a),iso(b),a,b]}
 const mk=()=>{const n=new Date();return n.getFullYear()+"-"+pad(n.getMonth()+1)};
-const billAmt=b=>{const p=S.pay[b.id+"|"+mk()];return p&&p.amt!=null&&p.amt!==""?+p.amt:b.est};
-function monthPlan(){const s=S.set,m=mk(),inc=s.salary*2;
+const bm=()=>{const n=new Date(),d=new Date(n.getFullYear(),n.getMonth()+bo,1);return d.getFullYear()+"-"+pad(d.getMonth()+1)};
+function prevAmt(b,m){let[y,mo]=m.split("-").map(Number);for(let i=0;i<12;i++){mo--;if(mo<1){mo=12;y--}const p=S.pay[b.id+"|"+y+"-"+pad(mo)];if(p&&p.amt!=null&&p.amt!=="")return+p.amt}return null}
+function billAmt(b,m){m=m||mk();const p=S.pay[b.id+"|"+m];if(p&&p.amt!=null&&p.amt!=="")return+p.amt;if(b.var){const v=prevAmt(b,m);if(v!=null)return v}return b.est}
+const esc=x=>(x||"").replace(/"/g,"&quot;");
+function monthPlan(m){m=m||mk();const s=S.set,mi=+m.slice(5)-1,inc=S.sal[m]||s.salary*2;
  let bills=0,php=0,usd=0,rub=0,ub={},pl=[];
- S.bills.filter(due).forEach(b=>{const a=billAmt(b);bills+=toRub(a,b.cur);if(b.cur=="PHP"){php+=a;pl.push([b.name,a])}else if(b.cur=="USD"){usd+=a;ub[b.name]=(ub[b.name]||0)+a}else rub+=a});
+ S.bills.filter(b=>due(b,mi)).forEach(b=>{const a=billAmt(b,m);bills+=toRub(a,b.cur);if(b.cur=="PHP"){php+=a;pl.push([b.name,a])}else if(b.cur=="USD"){usd+=a;ub[b.name]=(ub[b.name]||0)+a}else rub+=a});
  const exc={RUB:0,PHP:0,USD:0};let ex=0;
  S.exp.filter(e=>e.date.startsWith(m)).forEach(e=>{exc[e.cur]+=e.amt;ex+=toRub(e.amt,e.cur)});
  const T=k=>S.tr.filter(t=>t.date.startsWith(m)&&t.kind==k),sm=(a,k)=>a.reduce((t,x)=>t+x[k],0);
@@ -73,9 +76,9 @@ function monthPlan(){const s=S.set,m=mk(),inc=s.salary*2;
  const left=inc-rub-exc.RUB-outR+poolP/s.phpPerRub+poolU*s.phpPerUsd/s.phpPerRub;
  return{inc,bills,ex,left,php,usd,rub,ub,pl,nP,nU,tp,tu,outR,poolP,poolU,exc,pesosForUsd}}
 function render(){
- const nav=[["home","Home"],["exp","Receipts"],["bills","Bills"],["xfer","Transfers"],["set","Setup"]];
+ const nav=[["home","Home"],["exp","Receipts"],["bills","Bills"],["xfer","Transfers"],["sav","Savings"],["set","Setup"]];
  $("#nav").innerHTML=nav.map(x=>`<button class="${tab==x[0]?"on":""}" onclick="tab='${x[0]}';render()">${x[1]}</button>`).join("");
- $("#app").innerHTML=({home,exp,bills,xfer,set})[tab]();window.scrollTo(0,0)}
+ $("#app").innerHTML=({home,exp,bills,xfer,sav,set})[tab]();window.scrollTo(0,0)}
 function seg(){const[a,b,A,B]=range();const o=d=>d.toLocaleDateString("en",{month:"short",day:"numeric"});
  return`<div class="seg">${["week","half","month"].map(m=>`<button class="${mode==m?"on":""}" onclick="mode='${m}';off=0;render()">${m=="half"?"Pay period":m[0].toUpperCase()+m.slice(1)}</button>`).join("")}</div>
  <div class="row"><button class="s" onclick="off--;render()">‹</button><b>${o(A)} – ${o(B)}</b><button class="s" onclick="off++;render()">›</button></div>`}
@@ -89,13 +92,19 @@ function home(){const p=monthPlan(),l=inRange(),tot={};l.forEach(e=>tot[e.cat]=(
  <div class="card"><h2>Spending</h2>${seg()}<div class="big">${f(sum,"RUB")}</div>
  ${Object.keys(tot).sort((a,b)=>tot[b]-tot[a]).map(c=>`<div class="row" style="display:block"><div style="display:flex;justify-content:space-between"><span>${c}</span><span>${f(tot[c],"RUB")}</span></div><div class="bar"><i style="width:${tot[c]/sum*100}%"></i></div></div>`).join("")||'<div class="mu">No receipts in this range yet.</div>'}</div>`}
 function exp(){const l=inRange().sort((a,b)=>b.date.localeCompare(a.date));
+ const opts=sel=>S.cats.map(c=>`<option ${c==sel?"selected":""}>${esc(c)}</option>`).join("");
+ const cu=sel=>["RUB","PHP","USD"].map(c=>`<option ${c==sel?"selected":""}>${c}</option>`).join("");
+ const row=e=>`<div class="row"><div style="display:flex;gap:8px;align-items:center">${e.img?`<img class="th" src="${e.img}" onclick="big('${e.id}')">`:""}${e.link?`<a href="${e.link}" target="_blank" style="font-size:26px;text-decoration:none">📎</a>`:""}<div><div>${e.note||e.cat}</div><div class="mu">${e.date} · ${e.cat}</div></div></div><div style="text-align:right"><b>${f(e.amt,e.cur)}</b><br><span class="mu" onclick="ed='${e.id}';render()">edit</span> · <span class="mu" onclick="delExp('${e.id}')">delete</span></div></div>`;
+ const form=e=>`<div style="padding:8px 0;border-bottom:1px solid var(--bd)"><input id="xn" value="${esc(e.note)}" placeholder="Note — what is it?" style="margin-bottom:8px"><div class="g"><input id="xa" type="number" inputmode="decimal" value="${e.amt}"><select id="xc">${cu(e.cur)}</select><select id="xt">${opts(e.cat)}</select><input id="xd" type="date" value="${e.date}"></div><div class="g"><button onclick="saveEd('${e.id}')">Save</button><button class="s" onclick="ed=null;render()">Cancel</button></div></div>`;
  return`<h1>Receipts</h1><div class="card"><h2>Add expense</h2>
- <div class="g"><input id="ea" type="number" inputmode="decimal" placeholder="Amount"><select id="ec">${["RUB","PHP","USD"].map(c=>`<option>${c}</option>`)}</select>
- <select id="et">${CATS.map(c=>`<option>${c}</option>`)}</select><input id="ed" type="date" value="${iso(new Date())}"></div>
- <input id="en" placeholder="Note (store, item)" style="margin-bottom:8px">
+ <div class="g"><input id="ea" type="number" inputmode="decimal" placeholder="Amount"><select id="ec">${cu()}</select>
+ <select id="et" onchange="newCat(this)">${opts()}<option value="__new">+ New category…</option></select><input id="ed" type="date" value="${iso(new Date())}"></div>
+ <input id="en" placeholder="Note — what is it? (store, item)" style="margin-bottom:8px">
  <div class="g"><label class="fb">📷 Take photo<input type="file" accept="image/*" capture="environment" onchange="photo(this)" hidden></label><label class="fb">🖼️ From gallery<input type="file" accept="image/*" onchange="photo(this)" hidden></label></div><button onclick="addExp()" style="width:100%">Save</button>
  <div class="mu" id="pm">📷 Take a photo or pick one from your gallery (optional)</div></div>
- <div class="card"><h2>List</h2>${seg()}${l.map(e=>`<div class="row"><div style="display:flex;gap:8px;align-items:center">${e.img?`<img class="th" src="${e.img}" onclick="big('${e.id}')">`:""}${e.link?`<a href="${e.link}" target="_blank" style="font-size:26px;text-decoration:none">📎</a>`:""}<div><div>${e.note||e.cat}</div><div class="mu">${e.date} · ${e.cat}</div></div></div><div style="text-align:right"><b>${f(e.amt,e.cur)}</b><br><span class="mu" onclick="delExp('${e.id}')">delete</span></div></div>`).join("")||'<div class="mu">Nothing here.</div>'}</div>`}
+ <div class="card"><h2>List</h2>${seg()}${l.map(e=>e.id==ed?form(e):row(e)).join("")||'<div class="mu">Nothing here.</div>'}</div>`}
+function saveEd(id){const e=S.exp.find(x=>x.id==id);e.note=$("#xn").value;e.amt=+$("#xa").value||e.amt;e.cur=$("#xc").value;e.cat=$("#xt").value;e.date=$("#xd").value||e.date;ed=null;save();render()}
+function newCat(sel){if(sel.value!="__new")return;const n=(prompt("Name of the new category")||"").trim();if(n){if(!S.cats.includes(n)){S.cats.push(n);save();sel.add(new Option(n,n),sel.options[sel.options.length-1])}sel.value=n}else sel.value=S.cats[0]}
 function photo(i){const fl=i.files[0];if(!fl)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,700/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=im.width*k;c.height=im.height*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);pend=c.toDataURL("image/jpeg",.6);$("#pm").textContent="✅ Photo attached"};im.src=r.result};r.readAsDataURL(fl)}
 async function addExp(){const a=+$("#ea").value;if(!a)return alert("Enter an amount");
 const e={id:Date.now()+"",date:$("#ed").value,amt:a,cur:$("#ec").value,cat:$("#et").value,note:$("#en").value,img:pend};pend=null;
@@ -103,14 +112,14 @@ if(e.img&&S.set.drive){$("#pm").textContent="Uploading to Drive…";try{const r=
 S.exp.push(e);save();render()}
 function delExp(id){if(confirm("Delete this expense?")){S.exp=S.exp.filter(e=>e.id!=id);save();render()}}
 function big(id){const e=S.exp.find(x=>x.id==id);const w=window.open();if(w)w.document.write('<img style="max-width:100%" src="'+e.img+'">')}
-function bills(){const t=new Date().getDate(),m=mk();const pm=new Date();pm.setMonth(pm.getMonth()-1);const pk=pm.getFullYear()+"-"+pad(pm.getMonth()+1);
- const L=S.bills.filter(due).sort((a,b)=>a.day-b.day);
- return`<h1>Bills — ${new Date().toLocaleDateString("en",{month:"long"})}</h1>${L.map(b=>{const p=S.pay[b.id+"|"+m]||{},prev=S.pay[b.id+"|"+pk],paid=p.paid,late=!paid&&b.day<t,soon=!paid&&b.day>=t&&b.day-t<=3;
- return`<div class="card"><div class="row" style="border:0;padding:0"><b>${b.name}</b><span class="pill ${late?"bad":""}">${paid?"✅ paid":late?"overdue":soon?"due in "+(b.day-t)+"d":"due "+b.day+"th"}</span></div>
- <div class="mu">${(b.fr||1)==3?"Every 3 months":b.var?"Varies monthly":"Fixed"} · ${b.cur}${prev&&prev.amt?" · last month "+f(prev.amt,b.cur):""}</div>
- <div class="g" style="margin:8px 0 0"><input type="number" inputmode="decimal" value="${p.amt??(b.est||"")}" placeholder="Amount ${sym[b.cur]}" onchange="setBill(${b.id},'amt',this.value)"><button class="${paid?"s":""}" onclick="setBill(${b.id},'paid',${!paid})">${paid?"Undo":"Mark paid"}</button></div></div>`}).join("")}
- <div class="card"><h2>Add a bill</h2><div class="g"><input id="bn" placeholder="Name"><select id="bc">${["RUB","PHP","USD"].map(c=>`<option>${c}</option>`)}</select><input id="bd" type="number" placeholder="Due day (1-31)"><input id="be" type="number" placeholder="Usual amount"><select id="bf"><option value="1">Monthly</option><option value="3">Every 3 months</option></select></div><button onclick="addBill()">Add</button></div>`}
-function setBill(id,k,v){const key=id+"|"+mk();S.pay[key]=S.pay[key]||{};S.pay[key][k]=v;save();render()}
+function bills(){const n=new Date(),d=new Date(n.getFullYear(),n.getMonth()+bo,1),m=bm(),t=n.getDate(),cur=bo==0;
+ const L=S.bills.filter(b=>due(b,d.getMonth())).sort((a,b)=>a.day-b.day);
+ return`<h1>Bills</h1><div class="row"><button class="s" onclick="bo--;render()">‹</button><b>${d.toLocaleDateString("en",{month:"long",year:"numeric"})}</b><button class="s" onclick="bo++;render()">›</button></div>${L.map(b=>{const p=S.pay[b.id+"|"+m]||{},paid=p.paid,has=p.amt!=null&&p.amt!=="",pv=b.var&&!has?prevAmt(b,m):null,late=cur&&!paid&&b.day<t,soon=cur&&!paid&&b.day>=t&&b.day-t<=3,need=b.var&&!has&&!paid;
+ return`<div class="card"><div class="row" style="border:0;padding:0"><b>${b.name}</b><span class="pill ${late||need?"bad":""}">${paid?"✅ paid":late?"overdue":need?"enter amount":soon?"due in "+(b.day-t)+"d":"due "+b.day+"th"}</span></div>
+ <div class="mu">${(b.fr||1)==3?"Every 3 months":b.var?"Varies monthly":"Fixed"} · ${b.cur}${pv!=null?" · last: "+f(pv,b.cur):""}</div>
+ <div class="g" style="margin:8px 0 0"><input type="number" inputmode="decimal" value="${has?p.amt:b.var?"":(b.est||"")}" placeholder="${b.var?"This month's bill "+sym[b.cur]:"Amount "+sym[b.cur]}" onchange="setBill(${b.id},'amt',this.value)"><button class="${paid?"s":""}" onclick="setBill(${b.id},'paid',${!paid})">${paid?"Undo":"Mark paid"}</button></div></div>`}).join("")}
+ <div class="card"><h2>Add a bill</h2><div class="g"><input id="bn" placeholder="Name"><select id="bc">${["RUB","PHP","USD"].map(c=>`<option>${c}</option>`).join("")}</select><input id="bd" type="number" placeholder="Due day (1-31)"><input id="be" type="number" placeholder="Usual amount"><select id="bf"><option value="1">Monthly</option><option value="3">Every 3 months</option></select></div><button onclick="addBill()">Add</button></div>`}
+function setBill(id,k,v){const key=id+"|"+bm();S.pay[key]=S.pay[key]||{};S.pay[key][k]=v;save();render()}
 function addBill(){const n=$("#bn").value;if(!n)return;S.bills.push({id:Date.now(),name:n,cur:$("#bc").value,est:+$("#be").value||0,day:+$("#bd").value||1,var:1,fr:+$("#bf").value,st:new Date().getMonth()+1});save();render()}
 function xfer(){const p=monthPlan(),m=mk(),mv=S.tr.filter(t=>t.date.startsWith(m)&&t.kind=="RUB").reduce((a,t)=>a+t.rub,0);
  const L=S.tr.filter(t=>t.date.startsWith(m)).sort((a,b)=>b.date.localeCompare(a.date));
@@ -143,14 +152,28 @@ function xfer(){const p=monthPlan(),m=mk(),mv=S.tr.filter(t=>t.date.startsWith(m
 function tkc(){const k=$("#tk").value;$("#tr").placeholder=k=="PUSD"?"Pesos I sent ₱":"Rubles I sent ₽";$("#tg").placeholder=k=="PUSD"?"Dollars received $":"Pesos received ₱";$("#tg").style.display=k=="RUB"?"none":""}
 function addTr(){const k=$("#tk").value,r=+$("#tr").value,g=k=="RUB"?r:+$("#tg").value;if(!r||!g)return alert("Enter the amount sent and the amount received");S.tr.push({id:Date.now()+"",date:$("#td").value,kind:k,rub:r,got:g});save();render()}
 function delTr(id){if(confirm("Delete this transfer?")){S.tr=S.tr.filter(t=>t.id!=id);save();render()}}
+function setM(k,m,v){if(v==="")delete S[k][m];else S[k][m]=+v;save();render()}
+function periodSave(a,b){const A=iso(a),B=iso(b);let bl=0;
+ new Set([A.slice(0,7),B.slice(0,7)]).forEach(m=>{const[y,mo]=m.split("-").map(Number);S.bills.filter(x=>due(x,mo-1)).forEach(x=>{const dt=m+"-"+pad(Math.min(x.day,28));if(dt>=A&&dt<=B)bl+=toRub(billAmt(x,m),x.cur)})});
+ const ex=S.exp.filter(e=>e.date>=A&&e.date<=B).reduce((t,e)=>t+toRub(e.amt,e.cur),0),inc=(S.sal[A.slice(0,7)]||S.set.salary*2)/2;
+ return{a,b,inc,bl,ex,left:inc-bl-ex}}
+function sav(){const cur=mk(),set=new Set([cur]);
+ S.exp.forEach(e=>set.add(e.date.slice(0,7)));S.tr.forEach(t=>set.add(t.date.slice(0,7)));Object.keys(S.pay).forEach(k=>set.add(k.split("|")[1]));Object.keys(S.sal).forEach(k=>set.add(k));Object.keys(S.act).forEach(k=>set.add(k));
+ const rows=[...set].filter(m=>m<=cur).sort().reverse().map(m=>{const p=monthPlan(m),a=S.act[m];return{m,p,v:a!=null?+a:p.left}});
+ const total=rows.filter(r=>r.m<cur).reduce((t,r)=>t+r.v,0),best=Math.max(...rows.map(r=>r.v));
+ let d=new Date();const per=[];for(let i=0;i<12;i++){const h=halfOf(d);per.push(periodSave(h[0],h[1]));d=new Date(h[0].getFullYear(),h[0].getMonth(),h[0].getDate()-1)}
+ const pb=Math.max(...per.map(x=>x.left)),o=x=>x.toLocaleDateString("en",{month:"short",day:"numeric"}),nm=m=>new Date(m+"-01T00:00").toLocaleDateString("en",{month:"short",year:"numeric"});
+ return`<h1>Savings</h1><div class="card"><div class="mu">Total saved (finished months)</div><div class="big ${total<0?"bad":"ok"}">${f(total,"RUB")}</div><div class="mu">For each month it uses what you typed under "Actually saved", or the app's estimate if that box is empty.</div></div>
+ <div class="card"><h2>By month</h2>${rows.map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--bd)"><div class="row" style="border:0;padding:0"><b>${nm(r.m)}${r.v==best&&best>0?" ⭐":""}${r.m==cur?' <span class="pill">so far</span>':""}</b><b class="${r.v<0?"bad":"ok"}">${f(r.v,"RUB")}</b></div><div class="mu">app estimate ${f(r.p.left,"RUB")}</div><div class="g" style="margin:6px 0 0"><input type="number" inputmode="decimal" placeholder="Salary received ₽ (both paydays)" value="${S.sal[r.m]??""}" onchange="setM('sal','${r.m}',this.value)"><input type="number" inputmode="decimal" placeholder="Actually saved ₽" value="${S.act[r.m]??""}" onchange="setM('act','${r.m}',this.value)"></div></div>`).join("")}</div>
+ <div class="card"><h2>By pay period (last 12)</h2>${per.map(x=>`<div class="row"><span>${o(x.a)} – ${o(x.b)}${x.left==pb&&pb>0?" ⭐":""}</span><b class="${x.left<0?"bad":"ok"}">${f(x.left,"RUB")}</b></div>`).join("")}<div class="mu">Pay period = one payday's salary − bills due in those dates − spending. The monthly numbers also count your real transfers.</div></div>`}
 function set(){const s=S.set;const inp=(k,l,st)=>`<label class="mu">${l}</label><input type="number" step="${st||"any"}" value="${s[k]}" onchange="S.set.${k}=+this.value;save()" style="margin-bottom:8px">`;
  return`<h1>Setup</h1><div class="card">${inp("salary","Salary per payday (₽) — paid on the 11th & 26th")}${inp("phpPerRub","Rate: ₱ per 1 ₽")}${inp("phpPerUsd","Rate: ₱ per $1")}${inp("fee","Transfer cost on foreign money (%)")}<label class="mu">BDO account that receives your money</label><select onchange="S.set.bdo=this.value;save()"><option ${s.bdo=="Savings"?"selected":""}>Savings</option><option ${s.bdo=="Current"?"selected":""}>Current</option></select><label class="mu">Google Drive upload address (from Apps Script)</label><input value="${s.drive||""}" placeholder="https://script.google.com/macros/s/…/exec" onchange="S.set.drive=this.value.trim();save()"></div>
  <div class="card"><h2>Bills</h2>${S.bills.map(b=>`<div class="row"><span>${b.name} <span class="mu">(${b.cur}) due day </span><input type="number" min="1" max="31" style="width:60px;padding:4px" value="${b.day}" onchange="S.bills.find(x=>x.id==${b.id}).day=+this.value;save()">${mo(b)}</span><span><input type="number" style="width:90px" value="${b.est}" onchange="S.bills.find(x=>x.id==${b.id}).est=+this.value;save()"> <span class="mu" onclick="S.bills=S.bills.filter(x=>x.id!=${b.id});save();render()">✕</span></span></div>`).join("")}<div class="mu">Numbers above are your usual amounts, used until you enter the real bill.</div></div>
  <div class="card"><h2>Backup</h2><div class="mu" id="bk">${s.bk?"Last backup: "+new Date(s.bk).toLocaleString():"Not backed up yet"}</div><div class="g" style="margin-top:8px"><button onclick="doBackup()">Back up now</button><button class="s" onclick="doRestore()">Restore</button></div><div class="mu">New phone? Open the app, paste your Drive address above, then tap Restore.</div></div>`}
 async function cloud(a,data){const r=await fetch(S.set.drive,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify({action:a,data})});return r.json()}
 async function doBackup(){if(!S.set.drive)return alert("Paste the Drive upload address first.");$("#bk").textContent="Backing up…";
-try{S.set.bk=Date.now();const j=await cloud("backup",JSON.stringify({set:S.set,exp:S.exp,bills:S.bills,pay:S.pay,tr:S.tr}));if(!j.ok)throw 0;save();alert("Backed up to Drive ✅")}catch(e){alert("Backup failed. Check the Drive address and that you deployed the new script version.")}render()}
+try{S.set.bk=Date.now();const j=await cloud("backup",JSON.stringify({set:S.set,exp:S.exp,bills:S.bills,pay:S.pay,tr:S.tr,sal:S.sal,act:S.act,cats:S.cats}));if(!j.ok)throw 0;save();alert("Backed up to Drive ✅")}catch(e){alert("Backup failed. Check the Drive address and that you deployed the new script version.")}render()}
 async function doRestore(){if(!S.set.drive)return alert("Paste the Drive upload address first.");if(!confirm("Replace everything on this device with your Drive backup?"))return;
-try{const j=await cloud("restore");if(!j.ok||!j.data)return alert("No backup found in Drive yet.");const o=JSON.parse(j.data),dr=S.set.drive;S.set=o.set;S.set.drive=dr;S.exp=o.exp;S.bills=o.bills;S.pay=o.pay;S.tr=o.tr||[];save();alert("Restored ✅");tab="home";render()}catch(e){alert("Restore failed. Check the Drive address and the script version.")}}
+try{const j=await cloud("restore");if(!j.ok||!j.data)return alert("No backup found in Drive yet.");const o=JSON.parse(j.data),dr=S.set.drive;S.set=o.set;S.set.drive=dr;S.exp=o.exp;S.bills=o.bills;S.pay=o.pay;S.tr=o.tr||[];S.sal=o.sal||{};S.act=o.act||{};S.cats=o.cats||[...CATS];save();alert("Restored ✅");tab="home";render()}catch(e){alert("Restore failed. Check the Drive address and the script version.")}}
 render();
 </script></body></html>
